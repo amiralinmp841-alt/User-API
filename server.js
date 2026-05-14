@@ -21,38 +21,43 @@ app.all("*", async (req, res) => {
       "origin": TARGET
     };
 
+    let body;
+
+    if (!["GET", "HEAD"].includes(req.method)) {
+      if (req.headers["content-type"]?.includes("application/json")) {
+        body = JSON.stringify(req.body);
+      } else {
+        body = new URLSearchParams(req.body).toString();
+      }
+    }
+
     const response = await fetch(url, {
       method: req.method,
       headers,
-      body:
-        req.method === "GET" || req.method === "HEAD"
-          ? undefined
-          : req.headers["content-type"]?.includes("application/json")
-          ? JSON.stringify(req.body)
-          : new URLSearchParams(req.body),
+      body,
       redirect: "manual"
     });
 
     res.status(response.status);
 
-    const cookies = response.headers.raw()["set-cookie"];
-    if (cookies) res.setHeader("set-cookie", cookies);
-
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() !== "set-cookie") {
+      if (key.toLowerCase() !== "content-encoding") {
         res.setHeader(key, value);
       }
     });
 
-    response.body.pipe(res);
+    const text = await response.text();
+
+    res.send(text);
 
   } catch (err) {
-    console.error(err);
+    console.error("Proxy error:", err);
     res.status(500).send("Proxy error");
   }
 });
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Proxy running on port", PORT);
+  console.log(`Proxy running on ${PORT}`);
 });
