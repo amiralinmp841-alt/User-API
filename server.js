@@ -8,18 +8,17 @@ app.use(express.json());
 
 const TARGET = "https://my.telegram.org";
 
-// همه درخواست‌ها
 app.all("*", async (req, res) => {
   try {
     const url = TARGET + req.originalUrl;
 
     const headers = {
-      "user-agent":
-        req.headers["user-agent"] ||
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      "user-agent": req.headers["user-agent"] || "Mozilla/5.0",
       "accept": req.headers["accept"] || "*/*",
-      "content-type": req.headers["content-type"] || undefined,
-      "cookie": req.headers["cookie"] || ""
+      "content-type": req.headers["content-type"],
+      "cookie": req.headers["cookie"] || "",
+      "referer": TARGET,
+      "origin": TARGET
     };
 
     const response = await fetch(url, {
@@ -28,24 +27,25 @@ app.all("*", async (req, res) => {
       body:
         req.method === "GET" || req.method === "HEAD"
           ? undefined
-          : JSON.stringify(req.body),
+          : req.headers["content-type"]?.includes("application/json")
+          ? JSON.stringify(req.body)
+          : new URLSearchParams(req.body),
       redirect: "manual"
     });
 
-    // کپی status
     res.status(response.status);
 
-    // کپی headerها
+    const cookies = response.headers.raw()["set-cookie"];
+    if (cookies) res.setHeader("set-cookie", cookies);
+
     response.headers.forEach((value, key) => {
-      if (key.toLowerCase() === "set-cookie") {
-        res.setHeader("set-cookie", value);
-      } else {
+      if (key.toLowerCase() !== "set-cookie") {
         res.setHeader(key, value);
       }
     });
 
-    const body = await response.text();
-    res.send(body);
+    response.body.pipe(res);
+
   } catch (err) {
     console.error(err);
     res.status(500).send("Proxy error");
@@ -54,5 +54,5 @@ app.all("*", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Telegram proxy running on port", PORT);
+  console.log("Proxy running on port", PORT);
 });
